@@ -4,7 +4,7 @@
 <head>
     <title>SafeHer Route</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -64,10 +64,10 @@
     <button onclick="checkMySafety()">Check My Safety</button>
 
     <div id="controls">
-        <input type="text" id="start" placeholder="Current Location" oninput="searchLocation(this.value, 'start')">
+        <input type="text" id="start" placeholder="Current Location" oninput="searchLocation(this.value,'start')">
         <button onclick="detectLocation()">Use My Location</button>
 
-        <input type="text" id="end" placeholder="Destination" oninput="searchLocation(this.value, 'end')">
+        <input type="text" id="end" placeholder="Destination" oninput="searchLocation(this.value,'end')">
         <button onclick="getRoute()">Find Route</button>
 
         <div id="startSuggestions" class="suggestions"></div>
@@ -91,6 +91,49 @@
         let selectedEnd = null;
         let routeLayer = null;
 
+        /* ================= HEATMAP + RSS ================= */
+
+        async function loadSafety() {
+            try {
+                const res = await fetch(`${API_BASE}/heatmap`);
+                const data = await res.json();
+
+                // Grid heatmap
+                data.grid.forEach(cell => {
+                    if (cell.score <= 1) return;
+
+                    let color = cell.score > 8 ? "#4B0082" :
+                        cell.score > 4 ? "#87CEFA" : "#FFB6C1";
+
+                    L.circle([cell.lat, cell.lng], {
+                        radius: 900,
+                        fillColor: color,
+                        fillOpacity: 0.6,
+                        stroke: false
+                    }).addTo(map);
+                });
+
+                // RSS area circles
+                data.areas.forEach(area => {
+                    let color = area.score > 7 ? "#ff0000" :
+                        area.score > 4 ? "#ffcc00" : "#00cc44";
+
+                    L.circle([area.lat, area.lng], {
+                        radius: 500 + (area.score * 120),
+                        fillColor: color,
+                        fillOpacity: 0.85,
+                        stroke: false
+                    }).addTo(map)
+                        .bindPopup(`<b>${area.area}</b><br>Safety Score: ${area.score}`);
+                });
+
+            } catch (err) {
+                console.error("Safety load error", err);
+            }
+        }
+
+        loadSafety();
+
         /* ================= AUTOCOMPLETE ================= */
 
         async function searchLocation(query, type) {
@@ -110,6 +153,7 @@
             data.slice(0, 5).forEach(place => {
                 const div = document.createElement('div');
                 div.innerText = place.display_name;
+
                 div.onclick = () => {
                     document.getElementById(type).value = place.display_name;
 
@@ -122,6 +166,7 @@
 
                     box.innerHTML = '';
                 };
+
                 box.appendChild(div);
             });
         }
@@ -145,7 +190,6 @@
                 L.marker([lat, lon]).addTo(map)
                     .bindPopup("You are here").openPopup();
 
-                // Reverse geocode
                 const res = await fetch(
                     `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
                 );
@@ -158,7 +202,6 @@
         /* ================= ROUTE ================= */
 
         async function getRoute() {
-
             if (!selectedStart || !selectedEnd) {
                 alert("Select both locations");
                 return;
