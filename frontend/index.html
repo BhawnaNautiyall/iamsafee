@@ -87,6 +87,9 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
+        /* 🔥 FIXED: define safetyLayer */
+        let safetyLayer = L.layerGroup().addTo(map);
+
         let selectedStart = null;
         let selectedEnd = null;
         let routeLayer = null;
@@ -100,19 +103,17 @@
 
                 safetyLayer.clearLayers();
 
-                console.log("Areas:", data.areas.length); // Debug
-
                 // === RSS NEIGHBOURHOOD CIRCLES ===
                 data.areas.forEach(area => {
 
                     let color =
-                        area.score >= 8 ? "#800080" :   // Purple
-                            area.score >= 6 ? "#ff0000" :   // Red
-                                area.score >= 4 ? "#ffcc00" :   // Yellow
-                                    "#00cc44";                      // Green
+                        area.score >= 8 ? "#800080" :
+                            area.score >= 6 ? "#ff0000" :
+                                area.score >= 4 ? "#ffcc00" :
+                                    "#00cc44";
 
                     L.circle([area.lat, area.lng], {
-                        radius: 3000,      // Bigger radius so visible when zoomed out
+                        radius: 3000,
                         fillColor: color,
                         fillOpacity: 0.55,
                         color: color,
@@ -137,7 +138,6 @@
                 console.error("Safety load error:", err);
             }
         }
-
 
         loadSafety();
 
@@ -233,7 +233,7 @@
                 weight: 6
             }).addTo(map);
 
-            map.fitBounds(routeLayer.getBounds());
+            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
         }
 
         /* ================= SAFETY ================= */
