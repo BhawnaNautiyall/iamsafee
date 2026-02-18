@@ -56,6 +56,30 @@
         .suggestions div:hover {
             background: #f0f0f0;
         }
+
+        /* 🔥 Legend Box */
+        .legend {
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-size: 13px;
+            line-height: 18px;
+        }
+
+        .legend div {
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+        }
+
+        .legend span {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            border-radius: 50%;
+        }
     </style>
 </head>
 
@@ -87,8 +111,7 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        /* 🔥 FIXED: define safetyLayer */
-        let safetyLayer = L.layerGroup().addTo(map);
+        const safetyLayer = L.layerGroup().addTo(map);
 
         let selectedStart = null;
         let selectedEnd = null;
@@ -103,35 +126,23 @@
 
                 safetyLayer.clearLayers();
 
-                // === RSS NEIGHBOURHOOD CIRCLES ===
+                // 🔥 Only neighbourhood circles (NO blue grid)
                 data.areas.forEach(area => {
 
                     let color =
-                        area.score >= 8 ? "#800080" :
-                            area.score >= 6 ? "#ff0000" :
-                                area.score >= 4 ? "#ffcc00" :
-                                    "#00cc44";
+                        area.score >= 8 ? "#800080" :   // Very Unsafe
+                            area.score >= 6 ? "#ff0000" :   // High Risk
+                                area.score >= 4 ? "#ffcc00" :   // Moderate
+                                    "#00cc44";                      // Safe
 
                     L.circle([area.lat, area.lng], {
-                        radius: 3000,
+                        radius: 1500,   // 🔥 REDUCED SIZE
                         fillColor: color,
-                        fillOpacity: 0.55,
+                        fillOpacity: 0.5,
                         color: color,
                         weight: 1
                     }).addTo(safetyLayer)
                         .bindPopup(`<b>${area.area}</b><br>Safety Score: ${area.score}`);
-                });
-
-                // === GRID HEATMAP ===
-                data.grid.forEach(cell => {
-                    if (cell.score <= 0) return;
-
-                    L.circle([cell.lat, cell.lng], {
-                        radius: 1200,
-                        fillColor: "#87CEFA",
-                        fillOpacity: 0.25,
-                        stroke: false
-                    }).addTo(safetyLayer);
                 });
 
             } catch (err) {
@@ -140,6 +151,26 @@
         }
 
         loadSafety();
+
+        /* ================= LEGEND SIDEBAR ================= */
+
+        const legend = L.control({ position: "bottomright" });
+
+        legend.onAdd = function () {
+            const div = L.DomUtil.create("div", "legend");
+
+            div.innerHTML = `
+        <strong>Safety Legend</strong><br><br>
+        <div><span style="background:#00cc44"></span> Safe (0–3.9)</div>
+        <div><span style="background:#ffcc00"></span> Moderate (4–5.9)</div>
+        <div><span style="background:#ff0000"></span> High Risk (6–7.9)</div>
+        <div><span style="background:#800080"></span> Very Unsafe (8–10)</div>
+    `;
+
+            return div;
+        };
+
+        legend.addTo(map);
 
         /* ================= AUTOCOMPLETE ================= */
 
@@ -170,7 +201,6 @@
                     else selectedEnd = coords;
 
                     L.marker([place.lat, place.lon]).addTo(map);
-
                     box.innerHTML = '';
                 };
 
@@ -209,6 +239,7 @@
         /* ================= ROUTE ================= */
 
         async function getRoute() {
+
             if (!selectedStart || !selectedEnd) {
                 alert("Select both locations");
                 return;
@@ -254,6 +285,7 @@
 
             alert("Your Safety Score: " + data.safety_score + " / 10");
         }
+
     </script>
 
 </body>
