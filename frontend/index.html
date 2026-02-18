@@ -6,7 +6,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
 
     <style>
@@ -57,20 +56,6 @@
         .suggestions div:hover {
             background: #f0f0f0;
         }
-
-        .leaflet-control {
-            z-index: 10000 !important;
-        }
-
-        .legend-box {
-            background: white;
-            padding: 14px;
-            border-radius: 14px;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
-            font-size: 13px;
-            line-height: 20px;
-            min-width: 190px;
-        }
     </style>
 </head>
 
@@ -79,28 +64,23 @@
     <button onclick="checkMySafety()">Check My Safety</button>
 
     <div id="controls">
-        <input type="text" id="start" placeholder="Current Location">
+        <input type="text" id="start" placeholder="Current Location" oninput="searchLocation(this.value, 'start')">
         <button onclick="detectLocation()">Use My Location</button>
 
-        <input type="text" id="end" placeholder="Destination">
+        <input type="text" id="end" placeholder="Destination" oninput="searchLocation(this.value, 'end')">
         <button onclick="getRoute()">Find Route</button>
 
-        <div style="margin-top:8px;">
-            <button onclick="showFastest()">Fastest</button>
-            <button onclick="showSafest()">Safest</button>
-            <button onclick="showBalanced()">Balanced</button>
-        </div>
+        <div id="startSuggestions" class="suggestions"></div>
+        <div id="endSuggestions" class="suggestions"></div>
     </div>
 
     <div id="map"></div>
 
-    <!-- Leaflet JS (IMPORTANT: Before your script) -->
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
         const API_BASE = "https://iamsafee.onrender.com";
 
-        // Initialize map AFTER Leaflet loads
         const map = L.map('map').setView([28.6139, 77.2090], 11);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -109,74 +89,104 @@
 
         let selectedStart = null;
         let selectedEnd = null;
+        let routeLayer = null;
 
-        let fastLayer, safeLayer, balancedLayer;
+        /* ================= AUTOCOMPLETE ================= */
 
-        /* ================= LOAD SAFETY ================= */
+        async function searchLocation(query, type) {
+            if (query.length < 3) return;
 
-        async function loadSafety() {
-            try {
-                const res = await fetch(`${API_BASE}/heatmap`);
-                const data = await res.json();
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${query}`
+            );
+            const data = await res.json();
 
-                data.grid.forEach(cell => {
-                    if (cell.score <= 1) return;
+            const box = document.getElementById(
+                type === 'start' ? 'startSuggestions' : 'endSuggestions'
+            );
 
-                    let color = cell.score > 8 ? "#4B0082"
-                        : cell.score > 4 ? "#87CEFA"
-                            : "#FFB6C1";
+            box.innerHTML = '';
 
-                    L.circle([cell.lat, cell.lng], {
-                        radius: 900,
-                        fillColor: color,
-                        fillOpacity: 0.6,
-                        stroke: false
-                    }).addTo(map);
-                });
-            } catch (err) {
-                console.error("Heatmap error:", err);
-            }
+            data.slice(0, 5).forEach(place => {
+                const div = document.createElement('div');
+                div.innerText = place.display_name;
+                div.onclick = () => {
+                    document.getElementById(type).value = place.display_name;
+
+                    const coords = [parseFloat(place.lon), parseFloat(place.lat)];
+
+                    if (type === 'start') selectedStart = coords;
+                    else selectedEnd = coords;
+
+                    L.marker([place.lat, place.lon]).addTo(map);
+
+                    box.innerHTML = '';
+                };
+                box.appendChild(div);
+            });
         }
 
-        loadSafety();
+        /* ================= DETECT LOCATION ================= */
+
+        function detectLocation() {
+            if (!navigator.geolocation) {
+                alert("Geolocation not supported");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async pos => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+
+                selectedStart = [lon, lat];
+
+                map.setView([lat, lon], 14);
+
+                L.marker([lat, lon]).addTo(map)
+                    .bindPopup("You are here").openPopup();
+
+                // Reverse geocode
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+                );
+                const data = await res.json();
+
+                document.getElementById("start").value = data.display_name;
+            });
+        }
 
         /* ================= ROUTE ================= */
 
         async function getRoute() {
+
             if (!selectedStart || !selectedEnd) {
-                alert("Select both start and destination");
+                alert("Select both locations");
                 return;
             }
 
-            try {
-                const url = `${API_BASE}/route?start_lon=${selectedStart[0]}&start_lat=${selectedStart[1]}&end_lon=${selectedEnd[0]}&end_lat=${selectedEnd[1]}`;
+            const url = `${API_BASE}/route?start_lon=${selectedStart[0]}&start_lat=${selectedStart[1]}&end_lon=${selectedEnd[0]}&end_lat=${selectedEnd[1]}`;
 
-                const response = await fetch(url);
-                const data = await response.json();
+            const response = await fetch(url);
+            const data = await response.json();
 
-                if (!data.route1) {
-                    alert("No route found");
-                    return;
-                }
-
-                if (fastLayer) map.removeLayer(fastLayer);
-
-                const coords = data.route1.coords.map(c => [c[1], c[0]]);
-
-                fastLayer = L.polyline(coords, {
-                    color: "blue",
-                    weight: 5
-                }).addTo(map);
-
-                map.fitBounds(fastLayer.getBounds());
-
-            } catch (error) {
-                console.error("Route error:", error);
-                alert("Error fetching route");
+            if (!data.route1) {
+                alert("No route found");
+                return;
             }
+
+            if (routeLayer) map.removeLayer(routeLayer);
+
+            const coords = data.route1.coords.map(c => [c[1], c[0]]);
+
+            routeLayer = L.polyline(coords, {
+                color: "blue",
+                weight: 6
+            }).addTo(map);
+
+            map.fitBounds(routeLayer.getBounds());
         }
 
-        /* ================= SAFETY CHECK ================= */
+        /* ================= SAFETY ================= */
 
         async function checkMySafety() {
             if (!selectedStart) {
@@ -187,34 +197,12 @@
             const lat = selectedStart[1];
             const lon = selectedStart[0];
 
-            try {
-                const response = await fetch(`${API_BASE}/location_safety?lat=${lat}&lon=${lon}`);
-                const data = await response.json();
+            const response = await fetch(
+                `${API_BASE}/location_safety?lat=${lat}&lon=${lon}`
+            );
+            const data = await response.json();
 
-                alert("Your Safety Score: " + data.safety_score + " / 10");
-            } catch (error) {
-                alert("Error checking safety");
-            }
-        }
-
-        /* ================= LOCATION ================= */
-
-        function detectLocation() {
-            if (!navigator.geolocation) {
-                alert("Geolocation not supported");
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(pos => {
-                selectedStart = [pos.coords.longitude, pos.coords.latitude];
-
-                map.setView([pos.coords.latitude, pos.coords.longitude], 14);
-
-                L.marker([pos.coords.latitude, pos.coords.longitude])
-                    .addTo(map)
-                    .bindPopup("You are here")
-                    .openPopup();
-            });
+            alert("Your Safety Score: " + data.safety_score + " / 10");
         }
     </script>
 
