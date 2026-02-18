@@ -98,39 +98,46 @@
                 const res = await fetch(`${API_BASE}/heatmap`);
                 const data = await res.json();
 
-                // Grid heatmap
-                data.grid.forEach(cell => {
-                    if (cell.score <= 1) return;
+                safetyLayer.clearLayers();
 
-                    let color = cell.score > 8 ? "#4B0082" :
-                        cell.score > 4 ? "#87CEFA" : "#FFB6C1";
+                console.log("Areas:", data.areas.length); // Debug
 
-                    L.circle([cell.lat, cell.lng], {
-                        radius: 900,
-                        fillColor: color,
-                        fillOpacity: 0.6,
-                        stroke: false
-                    }).addTo(map);
-                });
-
-                // RSS area circles
+                // === RSS NEIGHBOURHOOD CIRCLES ===
                 data.areas.forEach(area => {
-                    let color = area.score > 7 ? "#ff0000" :
-                        area.score > 4 ? "#ffcc00" : "#00cc44";
+
+                    let color =
+                        area.score >= 8 ? "#800080" :   // Purple
+                            area.score >= 6 ? "#ff0000" :   // Red
+                                area.score >= 4 ? "#ffcc00" :   // Yellow
+                                    "#00cc44";                      // Green
 
                     L.circle([area.lat, area.lng], {
-                        radius: 500 + (area.score * 120),
+                        radius: 3000,      // Bigger radius so visible when zoomed out
                         fillColor: color,
-                        fillOpacity: 0.85,
-                        stroke: false
-                    }).addTo(map)
+                        fillOpacity: 0.55,
+                        color: color,
+                        weight: 1
+                    }).addTo(safetyLayer)
                         .bindPopup(`<b>${area.area}</b><br>Safety Score: ${area.score}`);
                 });
 
+                // === GRID HEATMAP ===
+                data.grid.forEach(cell => {
+                    if (cell.score <= 0) return;
+
+                    L.circle([cell.lat, cell.lng], {
+                        radius: 1200,
+                        fillColor: "#87CEFA",
+                        fillOpacity: 0.25,
+                        stroke: false
+                    }).addTo(safetyLayer);
+                });
+
             } catch (err) {
-                console.error("Safety load error", err);
+                console.error("Safety load error:", err);
             }
         }
+
 
         loadSafety();
 
